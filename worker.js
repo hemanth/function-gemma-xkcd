@@ -6,20 +6,18 @@ env.allowLocalModels = false;
 let model = null;
 let tokenizer = null;
 
-// Workaround for the Xenova/functiongemma-270m-game model which is overfit on the 'add' tool
+// Exact schema to match the physics model's training
 const TOOL_SCHEMA = [
     {
         type: "function",
         function: {
             name: "add",
-            description: "Add a new comic to the view. Use this for all comic requests.",
+            description: "Add an object. Use 'query' for search.",
             parameters: {
                 type: "object",
                 properties: {
-                    query: {
-                        type: "string",
-                        description: "The search query for the xkcd comic, or 'random'."
-                    }
+                    query: { type: "string" },
+                    location: { type: "array", items: { type: "number" } }
                 },
                 required: ["query"]
             }
@@ -32,9 +30,7 @@ self.onmessage = async (e) => {
 
     if (type === 'load') {
         try {
-            // Using the game model because it is public and fast, but we'll trick it
             const model_id = 'Xenova/functiongemma-270m-game';
-
             tokenizer = await AutoTokenizer.from_pretrained(model_id);
             model = await AutoModelForCausalLM.from_pretrained(model_id, {
                 device: 'webgpu',
@@ -43,16 +39,14 @@ self.onmessage = async (e) => {
                     self.postMessage({ type: 'progress', data: p });
                 }
             });
-
             self.postMessage({ type: 'ready' });
         } catch (err) {
-            console.error('Loading failed:', err);
             self.postMessage({ type: 'error', data: err.message });
         }
     } else if (type === 'generate') {
         try {
             const messages = [
-                { role: "developer", content: "You are a helpful assistant. To show a comic, you must call the 'add' tool with a 'query' parameter." },
+                { role: "developer", content: "You are an extraction assistant. Your job is to extract numbers or the word 'random' from the user input. Put any found number into the 'query' field of the 'add' tool. IGNORE location and coordinates." },
                 { role: "user", content: data }
             ];
 
@@ -65,15 +59,20 @@ self.onmessage = async (e) => {
 
             const output = await model.generate({
                 ...inputs,
-                max_new_tokens: 128,
+                max_new_tokens: 64,
                 do_sample: false,
-                stop_sequence: ['<end_of_turn>', '<end_function_call>']
+                repetition_penalty: 2.0, // Aggressive penalty to break the "agoago" loop
+                stop_sequence: ['<end_of_turn>', '<end_function_call>', 'Done']
             });
 
             const decoded = tokenizer.decode(output.slice(0, [inputs.input_ids.dims[1], null]), { skip_special_tokens: false });
-            console.log('Decoded output:', decoded);
+            console.log('Model raw output:', decoded);
 
-            // Parsing logic for FunctionGemma
+            // HEURISTIC: First check user input for a number directly. 
+            // If the user says "xkcd 327", we almost certainly want 327.
+            const userNumMatch = data.match(/\d+/);
+            const userNum = userNumMatch ? userNumMatch[0] : null;
+
             const startTag = "<start_function_call>";
             const endTag = "<end_function_call>";
             const startIndex = decoded.indexOf(startTag);
@@ -82,42 +81,42 @@ self.onmessage = async (e) => {
                 const endIndex = decoded.indexOf(endTag, startIndex);
                 let callContent = decoded.substring(startIndex + startTag.length, endIndex !== -1 ? endIndex : undefined);
 
-                // Extract parameters from whatever the model generated
-                const braceIndex = callContent.indexOf("{");
-                if (braceIndex !== -1) {
-                    const argsStr = callContent.substring(braceIndex);
+                // If the model generated a tool call, we extract the best "query"
+                let finalQuery = 'random';
 
-                    try {
-                        // Very robust parsing for potential weirdness
-                        let sanitizedArgs = argsStr
-                            .replace(/<escape>(.*?)<escape>/g, '"$1"')
-                            .replace(/(\w+):/g, '"$1":')
-                            .replace(/'/g, '"')
-                            .replace(/,\s*}/g, '}');
-
-                        const args = JSON.parse(sanitizedArgs);
-
-                        // Map the model's output to our actual intent
-                        // If it generates 'query', great. If it generates 'location' or something else, we take the first string value or 'random'
-                        const bestQuery = args.query || (Object.values(args).find(v => typeof v === 'string') || 'random');
-
-                        self.postMessage({
-                            type: 'tool_call',
-                            data: { name: 'get_xkcd_cartoon', parameters: { query: bestQuery } }
-                        });
-                    } catch (e) {
-                        // Fallback: search for any string in quotes if JSON parse fails
-                        const stringMatch = argsStr.match(/"([^"]+)"/);
-                        const fallbackQuery = stringMatch ? stringMatch[1] : 'random';
-                        self.postMessage({
-                            type: 'tool_call',
-                            data: { name: 'get_xkcd_cartoon', parameters: { query: fallbackQuery } }
-                        });
+                // If user provided a number, that's ALWAYS better than what a physics-biased model extracts
+                if (userNum && userNum !== '0') {
+                    finalQuery = userNum;
+                } else if (callContent.includes('target') || callContent.includes('query')) {
+                    // Try to extract from the model's query field
+                    const queryMatch = callContent.match(/"query"\s*:\s*"([^"]+)"/) || callContent.match(/query\s*:\s*([^,}]+)/);
+                    if (queryMatch) {
+                        const extracted = queryMatch[1].trim();
+                        if (extracted && extracted !== 'circle' && extracted !== 'rect' && extracted !== '0') {
+                            finalQuery = extracted;
+                        }
                     }
                 }
+
+                self.postMessage({
+                    type: 'tool_call',
+                    data: { name: 'get_xkcd_cartoon', parameters: { query: finalQuery } }
+                });
             } else {
-                const text = tokenizer.decode(output.slice(0, [inputs.input_ids.dims[1], null]), { skip_special_tokens: true });
-                self.postMessage({ type: 'text', data: text || "I'm thinking... please try asking 'Show me a comic'." });
+                // If it's just raw text, still try to find a number/random intent
+                if (userNum && userNum !== '0') {
+                    self.postMessage({
+                        type: 'tool_call',
+                        data: { name: 'get_xkcd_cartoon', parameters: { query: userNum } }
+                    });
+                } else if (data.toLowerCase().includes('random')) {
+                    self.postMessage({
+                        type: 'tool_call',
+                        data: { name: 'get_xkcd_cartoon', parameters: { query: 'random' } }
+                    });
+                } else {
+                    self.postMessage({ type: 'text', data: "I couldn't identify a comic. Try 'xkcd 500'." });
+                }
             }
         } catch (err) {
             self.postMessage({ type: 'error', data: err.message });

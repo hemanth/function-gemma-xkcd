@@ -56,7 +56,7 @@ async function handleToolCall(toolCall) {
         try {
             let comic;
             const baseUrl = 'https://xkcd.hemanth.deno.net';
-            if (query === 'random' || !query) {
+            if (query === 'random' || !query || query === '0' || query === 0) {
                 // The proxy gives latest on the root
                 const latestRes = await fetch(`${baseUrl}/`);
                 const latestData = await latestRes.json();
@@ -67,13 +67,15 @@ async function handleToolCall(toolCall) {
                 const randomData = await res.json();
                 comic = randomData.data;
             } else {
-                const numMatch = query.match(/\d+/);
-                if (numMatch) {
-                    const res = await fetch(`${baseUrl}/${numMatch[0]}`);
+                const numMatch = query.toString().match(/\d+/);
+                const targetNum = numMatch ? numMatch[0] : null;
+
+                if (targetNum && targetNum !== '0') {
+                    const res = await fetch(`${baseUrl}/${targetNum}`);
                     const specificData = await res.json();
                     comic = specificData.data;
                 } else {
-                    logMessage.textContent = `Searching for "${query}" (fetching latest)...`;
+                    logMessage.textContent = `Invalid comic number "${query}" (fetching latest)...`;
                     const res = await fetch(`${baseUrl}/`);
                     const latestData = await res.json();
                     comic = latestData.data;

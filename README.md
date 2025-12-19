@@ -35,6 +35,15 @@ A premium local-first web application that uses Google's **FunctionGemma** model
 3. **Open the browser**:
    Navigate to `http://localhost:3000`.
 
+## Sample Prompts
+
+Since **FunctionGemma** is designed to extract intent, you can be quite natural with your requests:
+
+- **Random Comics**: `"Show me a random xkcd"`, `"Give me a random comic"`, `"I'm feeling lucky"`.
+- **Specific Comics**: `"Show me comic number 327"`, `"Go to xkcd 500"`, `"Find comic 1000"`.
+- **Latest Comic**: `"What's the latest xkcd?"`, `"Fetch the most recent comic"`.
+- **Natural Language**: `"I'd like to read a random comic about physics"`.
+
 ## How it works
 
 1. The model is loaded into a **Web Worker** to keep the UI responsive.
