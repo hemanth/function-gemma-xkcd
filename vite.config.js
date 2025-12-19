@@ -6,7 +6,8 @@ export default defineConfig({
     plugins: [
         viteStaticCopy({
             targets: [
-                { src: 'worker.js', dest: '.' }
+                { src: 'worker.js', dest: '.' },
+                { src: 'og-image.png', dest: '.' }
             ]
         })
     ],
