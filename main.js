@@ -1,4 +1,4 @@
-const worker = new Worker('worker.js', { type: 'module' });
+const worker = new Worker('./worker.js', { type: 'module' });
 
 const statusMessage = document.getElementById('status-message');
 const progressBar = document.getElementById('progress-bar');
