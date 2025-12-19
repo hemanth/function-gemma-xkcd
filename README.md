@@ -1,8 +1,9 @@
 # FunctionGemma x XKCD
+> Local-first web application that uses Google's **FunctionGemma** model (270M) to extract structured intent from natural language and fetch XKCD cartoons.
 
-A premium local-first web application that uses Google's **FunctionGemma** model (270M) to extract structured intent from natural language and fetch XKCD cartoons.
 
-![Screenshot](https://huggingface.co/spaces/webml-community/FunctionGemma-Physics-Playground/resolve/main/thumbnail.png) *(Note: Reference image)*
+https://github.com/user-attachments/assets/ed9ca9fe-c09b-443b-b17c-57fc916055c1
+
 
 ## Features
 
