@@ -31,9 +31,11 @@ worker.onmessage = (e) => {
 
     switch (type) {
         case 'progress':
-            if (data.status === 'progress') {
-                progressBar.style.width = `${data.progress}%`;
-                statusMessage.textContent = `Downloading intelligence... ${Math.round(data.progress)}%`;
+            // Include all relevant progress statuses
+            if (['init', 'download', 'progress', 'done', 'ready'].includes(data.status)) {
+                progressBar.style.width = `${data.progress || 0}%`;
+                const msg = data.customMessage || 'Loading intelligence...';
+                statusMessage.textContent = `${msg} ${Math.round(data.progress || 0)}%`;
             }
             break;
         case 'ready':
