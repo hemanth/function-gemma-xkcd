@@ -15,7 +15,7 @@
     "webgpu",
     "ai"
   ],
-  "author": "hemanth",
+  "author": "hemanth <hemanth.hm@gmail.com>",
   "license": "MIT",
   "devDependencies": {
     "vite": "^7.3.0",
