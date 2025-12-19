@@ -18,6 +18,14 @@ const comicDate = document.getElementById('comic-date');
 // Initialize
 worker.postMessage({ type: 'load' });
 
+const setUIState = (loading) => {
+    userInput.disabled = loading;
+    sendBtn.disabled = loading;
+    if (!loading) {
+        userInput.focus();
+    }
+};
+
 worker.onmessage = (e) => {
     const { type, data } = e.data;
 
@@ -31,24 +39,25 @@ worker.onmessage = (e) => {
         case 'ready':
             statusMessage.textContent = 'System online. Ready for extraction.';
             progressBar.parentElement.classList.add('hidden');
-            userInput.disabled = false;
-            sendBtn.disabled = false;
+            setUIState(false);
             break;
         case 'error':
             statusMessage.textContent = 'Error: ' + data;
-            statusMessage.style.color = '#ff4b2b';
+            statusMessage.style.color = '#ef4444';
+            setUIState(false);
+            thinkingIndicator.classList.add('hidden');
             break;
         case 'tool_call':
             handleToolCall(data);
             break;
         case 'text':
             showText(data);
+            setUIState(false);
             break;
     }
 };
 
 async function handleToolCall(toolCall) {
-    // Be flexible with tool names (model might sometimes vary)
     if (toolCall.name.includes('xkcd')) {
         const query = toolCall.parameters.query || 'random';
         logMessage.textContent = `Accessing XKCD database for: "${query}"...`;
@@ -57,7 +66,6 @@ async function handleToolCall(toolCall) {
             let comic;
             const baseUrl = 'https://xkcd.hemanth.deno.net';
             if (query === 'random' || !query || query === '0' || query === 0) {
-                // The proxy gives latest on the root
                 const latestRes = await fetch(`${baseUrl}/`);
                 const latestData = await latestRes.json();
                 const latestNum = latestData.data.num;
@@ -84,9 +92,12 @@ async function handleToolCall(toolCall) {
             displayComic(comic);
         } catch (err) {
             showText("Extraction failed: " + err.message);
+        } finally {
+            setUIState(false);
         }
     } else {
         showText(`Model requested unknown tool: ${toolCall.name}`);
+        setUIState(false);
     }
 }
 
@@ -99,26 +110,32 @@ function displayComic(comic) {
     comicAlt.textContent = comic.alt;
     comicNum.textContent = `Comic #${comic.num}`;
     comicDate.textContent = `${comic.day}/${comic.month}/${comic.year}`;
+    setUIState(false);
 }
 
 function showText(text) {
     thinkingIndicator.classList.add('hidden');
-    // Just a simple way to show raw text if tool call fails
-    statusMessage.textContent = "Model Response: " + text;
+    statusMessage.textContent = text;
+    setUIState(false);
 }
 
-sendBtn.onclick = () => {
+const handleSend = () => {
     const text = userInput.value.trim();
-    if (!text) return;
+    if (!text || sendBtn.disabled) return;
 
-    userInput.value = '';
+    setUIState(true);
     comicDisplay.classList.add('hidden');
     thinkingIndicator.classList.remove('hidden');
     logMessage.textContent = "Analyzing intent...";
 
     worker.postMessage({ type: 'generate', data: text });
+    userInput.value = '';
 };
 
+sendBtn.onclick = handleSend;
+
 userInput.onkeydown = (e) => {
-    if (e.key === 'Enter') sendBtn.click();
+    if (e.key === 'Enter') {
+        handleSend();
+    }
 };
